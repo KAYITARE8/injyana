@@ -27,11 +27,11 @@ Docker is optional. To start the bundled PostgreSQL container instead, run
 
 ## Deploy (Render)
 1. Publish this project to a GitHub repository. `.env` and uploaded audio are excluded by `.gitignore`.
-2. Create a PostgreSQL database and a private Cloudflare R2 bucket. Create an R2 API token restricted to that bucket.
-3. In Render, create a Blueprint from the repository root. `render.yaml` configures a free web service and prompts for `DATABASE_URL`, `AUDIUS_API_KEY`, and R2 credentials. Render generates `JWT_SECRET`.
-4. Keep the R2 bucket private; audio is streamed through authenticated app routes. Local development uses `uploads/` unless `UPLOAD_STORAGE=r2` is set.
+2. Create a PostgreSQL project on Supabase Free and copy its connection string from the project dashboard.
+3. In Render, create a Blueprint from the repository root. `render.yaml` configures a free web service and prompts for the Supabase `DATABASE_URL`; Render generates `JWT_SECRET`. The Audius API key is optional.
+4. The Render Free service uses temporary local storage for uploads. Uploaded audio can disappear whenever the service restarts or is redeployed. Use persistent object storage (for example, a private R2 bucket) before relying on uploads. Local development uses `uploads/` unless `UPLOAD_STORAGE=r2` is set.
 
-The free web service may sleep when idle. Review current Render and Cloudflare pricing and limits before deploying; choose a suitable PostgreSQL plan and enable backups before opening sign-ups publicly. Never add provider credentials to the repository.
+The free web service may sleep when idle. The Supabase Free database has plan limits and may pause after inactivity; check current provider limits and enable backups before opening sign-ups publicly. Never add provider credentials to the repository.
 
 ## Notes
 - Audius playback and uploads need an internet connection. Only stream tracks the Audius API marks as available and streamable. Respect Audius API terms and creator rights; this app does not download Audius tracks.
