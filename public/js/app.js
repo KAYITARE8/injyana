@@ -108,7 +108,11 @@ async function api(path, opts = {}) {
 }
 
 const libTrack = (t) => (t.id != null ? S.tracks.find((x) => x.id === t.id) : S.tracks.find((x) => x.audius_id && x.audius_id === t.audius_id));
-const playable = (t) => !!t && S.online && (t.source === 'upload' || t.source === 'audius' || (t.source === 'apple' && !!t.preview_url));
+const supportsApplePreview = () => audio.canPlayType('audio/mp4; codecs="mp4a.40.2"') !== '';
+const playable = (t) => !!t && S.online && (
+  t.source === 'upload' || t.source === 'audius' ||
+  (t.source === 'apple' && !!t.preview_url && supportsApplePreview())
+);
 
 async function saveSnapshot() { await idb.set('kv', 'snapshot', { tracks: S.tracks, playlists: S.playlists, t: S.lastSync }); }
 
@@ -258,6 +262,10 @@ async function playTrack(t, list, idx) {
     }
   }
   if (!playable(t)) {
+    if (t && t.source === 'apple') {
+      toast(t.preview_url ? 'This browser cannot play Apple Music previews. Open the full track in Apple Music.' : 'No preview is available. Open the full track in Apple Music.', true);
+      return;
+    }
     toast(S.online ? 'This saved track is no longer playable.' : 'You are offline. Connect to listen.', true);
     return;
   }
@@ -280,7 +288,9 @@ async function playTrack(t, list, idx) {
     mediaSession(t);
   } catch (e) {
     if (e && e.name === 'NotAllowedError') return;
-    toast('Could not play this track.', true);
+    toast(t.source === 'apple'
+      ? 'Could not play this preview. Open the full track in Apple Music.'
+      : 'Could not play this track.', true);
   }
 }
 
@@ -410,7 +420,7 @@ function rowHTML(t, i, listName, o = {}) {
     : t.source === 'audius' && t.audius_url
       ? `${details ? ' · ' : ''}<a href="${esc(t.audius_url)}" target="_blank" rel="noopener noreferrer">Audius</a>`
       : '';
-  const canPlay = t.source !== 'apple' || !!t.preview_url;
+  const canPlay = t.source !== 'apple' || (!!t.preview_url && supportsApplePreview());
   const actions = t.source === 'apple'
     ? (t.apple_url ? `<a class="source-action" href="${esc(t.apple_url)}" target="_blank" rel="noopener noreferrer">Full track</a>` : '')
     : `<button class="icon-btn fav ${fav ? 'on' : ''}" data-act="fav" data-list="${listName}" data-i="${i}" aria-label="${fav ? 'Remove from favorites' : 'Add to favorites'}">${icon('heart')}</button>
@@ -419,7 +429,7 @@ function rowHTML(t, i, listName, o = {}) {
   return `<div class="row ${keyOf(t) === (S.cur && keyOf(S.cur)) ? 'current' : ''} ${unavailable ? 'unavailable' : ''}" data-key="${keyOf(t)}">
     <span class="idx">${String(i + 1).padStart(2, '0')}</span>
     ${thumb(t, canPlay ? { list: listName, i } : null)}
-    <div class="t"><b>${esc(t.title)}</b><small>${details}${sourceLink}${t.source === 'apple' && !t.preview_url ? `${details || sourceLink ? ' · ' : ''}No preview` : ''}</small></div>
+    <div class="t"><b>${esc(t.title)}</b><small>${details}${sourceLink}${t.source === 'apple' && !canPlay ? `${details || sourceLink ? ' · ' : ''}${t.preview_url ? 'Preview unsupported in this browser' : 'No preview'}` : ''}</small></div>
     ${wave()}
     <span class="dur">${dur}</span>
     <div class="acts">${actions}</div></div>`;
@@ -470,7 +480,7 @@ const views = {
   search() {
     let body;
     const appleSearch = S.searchSource === 'apple';
-    const previewCount = S.results.filter((track) => track.preview_url).length;
+    const previewCount = S.results.filter((track) => track.preview_url && supportsApplePreview()).length;
     if (S.searching) body = empty('search', 'Searching…', appleSearch ? 'Looking through the Apple Music catalog.' : 'Looking through Audius.');
     else if (S.searchErr) body = `<div class="notice">${esc(S.searchErr)}</div>`;
     else if (S.results.length) body = `<div class="count-row" style="margin-bottom:6px"><span>${S.results.length} tracks${appleSearch ? ` · ${previewCount} previews` : ' · Audius'}</span>${previewCount ? `<button class="btn btn-yellow" data-act="listall" data-list="search">${icon('play')}Play previews</button>` : ''}</div>${listHTML(S.results, 'search')}`;
@@ -480,7 +490,7 @@ const views = {
       ${head(appleSearch ? 'Official catalog · Apple Music' : 'Independent music · Audius', 'Find your next feeling.', 'Search official releases, or switch to Audius for independent uploads.')}
       <label class="search-source"><span>Music source</span><select id="search-source" aria-label="Choose a music source"><option value="apple" ${appleSearch ? 'selected' : ''}>Apple Music catalog</option><option value="audius" ${!appleSearch ? 'selected' : ''}>Audius independent</option></select></label>
       <form class="searchbox" id="search-form" role="search">${icon('search')}<input id="q" type="search" placeholder="Search songs, artists, moods…" value="${esc(S.q)}" autocomplete="off" aria-label="Search songs"><button class="btn btn-purple" type="submit">Search</button></form>
-      <p class="search-source-note">${appleSearch ? 'Play available previews here; open Apple Music for full tracks.' : 'Audius uploads are community-published; remixes and unofficial uploads may appear.'}</p>
+      <p class="search-source-note">${appleSearch ? (supportsApplePreview() ? 'Play available previews here; open Apple Music for full tracks.' : 'This browser may not play Apple preview clips; open full tracks in Apple Music.') : 'Audius uploads are community-published; remixes and unofficial uploads may appear.'}</p>
       ${body}${footer()}</div>`;
   },
 
@@ -946,7 +956,8 @@ function restoreScroll() {
 }
 function restoreSession() {
   const d = readSession(); if (!d) return;
-  S.q = d.q || ''; S.results = d.results || []; S.filter = d.filter || 'all';
+  const refreshLegacySearch = !d.searchSource && d.results && d.results.length > 0;
+  S.q = d.q || ''; S.results = refreshLegacySearch ? [] : d.results || []; S.filter = d.filter || 'all';
   S.searchSource = d.searchSource === 'audius' ? 'audius' : 'apple';
   S.shuffle = d.shuffle === true;
   S.repeat = ['off', 'all', 'one'].includes(d.repeat) ? d.repeat : 'off';
@@ -963,6 +974,7 @@ function restoreSession() {
     }
   }
   paintPlayer(); renderView(); restoreScroll();
+  if (refreshLegacySearch && S.q) doSearch(S.q, S.searchSource);
 }
 setInterval(saveSession, 3000);
 window.addEventListener('pagehide', saveSession);
