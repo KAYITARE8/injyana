@@ -41,7 +41,11 @@ const icon = (n, cls) => `<svg viewBox="0 0 24 24" aria-hidden="true"${cls ? ` c
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (s) => { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const wave = () => '<span class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></span>';
-const keyOf = (t) => (t.id != null ? 'i' + t.id : 'a' + t.audius_id);
+const keyOf = (t) => {
+  if (t.id != null) return 'i' + t.id;
+  if (t.apple_id) return 'apple:' + t.apple_id;
+  return 'audius:' + t.audius_id;
+};
 const year = new Date().getFullYear();
 
 function toast(msg, err) {
@@ -84,7 +88,7 @@ const idb = (() => {
 const S = {
   user: null, tracks: [], playlists: [], online: navigator.onLine, downloaded: new Set(),
   queue: [], baseQueue: [], qi: -1, cur: null, playing: false, vol: 1, shuffle: false, repeat: 'off', lastSync: null,
-  results: [], q: '', searchErr: '', searching: false, filter: 'all', lists: {}, plId: null,
+  results: [], q: '', searchErr: '', searching: false, searchSource: 'apple', searchRequestId: 0, filter: 'all', lists: {}, plId: null,
   trendingType: 'tracks', trendingGenre: 'all', trendingItems: [], trendingLoading: false,
   trendingLoadedKey: '', trendingError: '', trendingRequestId: 0,
   weekTracks: [], weekLoaded: false, weekLoading: false, weekError: '', weekMeta: null,
@@ -104,7 +108,7 @@ async function api(path, opts = {}) {
 }
 
 const libTrack = (t) => (t.id != null ? S.tracks.find((x) => x.id === t.id) : S.tracks.find((x) => x.audius_id && x.audius_id === t.audius_id));
-const playable = (t) => !!t && S.online && (t.source === 'upload' || t.source === 'audius');
+const playable = (t) => !!t && S.online && (t.source === 'upload' || t.source === 'audius' || (t.source === 'apple' && !!t.preview_url));
 
 async function saveSnapshot() { await idb.set('kv', 'snapshot', { tracks: S.tracks, playlists: S.playlists, t: S.lastSync }); }
 
@@ -266,6 +270,8 @@ async function playTrack(t, list, idx) {
       const blob = await getBlob(t.id);
       if (blob) blobUrl = URL.createObjectURL(blob);
       audio.src = blobUrl || `/api/tracks/${t.id}/audio`;
+    } else if (t.source === 'apple') {
+      audio.src = t.preview_url;
     } else {
       audio.src = `/api/audius/tracks/${encodeURIComponent(t.audius_id)}/stream`;
     }
@@ -395,19 +401,28 @@ function rowHTML(t, i, listName, o = {}) {
   const dur = t.duration ? fmt(t.duration) : '';
   const details = [
     t.artist || (t.source === 'upload' ? 'Your upload' : ''),
+    t.album || '',
     t.genre || '',
     listName === 'week' ? `${t.play_count} play${t.play_count === 1 ? '' : 's'}` : ''
   ].filter(Boolean).map(esc).join(' · ');
-  return `<div class="row ${keyOf(t) === (S.cur && keyOf(S.cur)) ? 'current' : ''} ${playable(t) ? '' : 'unavailable'}" data-key="${keyOf(t)}">
+  const sourceLink = t.source === 'apple' && t.apple_url
+    ? `${details ? ' · ' : ''}<a href="${esc(t.apple_url)}" target="_blank" rel="noopener noreferrer">Apple Music</a>`
+    : t.source === 'audius' && t.audius_url
+      ? `${details ? ' · ' : ''}<a href="${esc(t.audius_url)}" target="_blank" rel="noopener noreferrer">Audius</a>`
+      : '';
+  const canPlay = t.source !== 'apple' || !!t.preview_url;
+  const actions = t.source === 'apple'
+    ? (t.apple_url ? `<a class="source-action" href="${esc(t.apple_url)}" target="_blank" rel="noopener noreferrer">Full track</a>` : '')
+    : `<button class="icon-btn fav ${fav ? 'on' : ''}" data-act="fav" data-list="${listName}" data-i="${i}" aria-label="${fav ? 'Remove from favorites' : 'Add to favorites'}">${icon('heart')}</button>
+      <button class="icon-btn" data-act="more" data-list="${listName}" data-i="${i}" aria-label="More options">${icon('more')}</button>`;
+  const unavailable = t.source === 'apple' ? false : !playable(t);
+  return `<div class="row ${keyOf(t) === (S.cur && keyOf(S.cur)) ? 'current' : ''} ${unavailable ? 'unavailable' : ''}" data-key="${keyOf(t)}">
     <span class="idx">${String(i + 1).padStart(2, '0')}</span>
-    ${thumb(t, { list: listName, i })}
-    <div class="t"><b>${esc(t.title)}</b><small>${details}${t.source === 'audius' && t.audius_url ? `${details ? ' · ' : ''}<a href="${esc(t.audius_url)}" target="_blank" rel="noopener noreferrer">Audius</a>` : ''}</small></div>
+    ${thumb(t, canPlay ? { list: listName, i } : null)}
+    <div class="t"><b>${esc(t.title)}</b><small>${details}${sourceLink}${t.source === 'apple' && !t.preview_url ? `${details || sourceLink ? ' · ' : ''}No preview` : ''}</small></div>
     ${wave()}
     <span class="dur">${dur}</span>
-    <div class="acts">
-      <button class="icon-btn fav ${fav ? 'on' : ''}" data-act="fav" data-list="${listName}" data-i="${i}" aria-label="${fav ? 'Remove from favorites' : 'Add to favorites'}">${icon('heart')}</button>
-      <button class="icon-btn" data-act="more" data-list="${listName}" data-i="${i}" aria-label="More options">${icon('more')}</button>
-    </div></div>`;
+    <div class="acts">${actions}</div></div>`;
 }
 function listHTML(arr, name) {
   S.lists[name] = arr;
@@ -454,14 +469,18 @@ const views = {
 
   search() {
     let body;
-    if (S.searching) body = empty('search', 'Searching…', 'Looking through Audius.');
+    const appleSearch = S.searchSource === 'apple';
+    const previewCount = S.results.filter((track) => track.preview_url).length;
+    if (S.searching) body = empty('search', 'Searching…', appleSearch ? 'Looking through the Apple Music catalog.' : 'Looking through Audius.');
     else if (S.searchErr) body = `<div class="notice">${esc(S.searchErr)}</div>`;
-    else if (S.results.length) body = `<div class="count-row" style="margin-bottom:6px"><span>${S.results.length} results</span><button class="btn btn-yellow" data-act="listall" data-list="search">${icon('play')}Play all</button></div>${listHTML(S.results, 'search')}`;
+    else if (S.results.length) body = `<div class="count-row" style="margin-bottom:6px"><span>${S.results.length} tracks${appleSearch ? ` · ${previewCount} previews` : ' · Audius'}</span>${previewCount ? `<button class="btn btn-yellow" data-act="listall" data-list="search">${icon('play')}Play previews</button>` : ''}</div>${listHTML(S.results, 'search')}`;
     else if (S.q) body = empty('search', 'No matches', 'Try a different song, artist or mood.');
-    else body = empty('search', 'What are you in the mood for?', S.online ? 'Search any song or artist to listen right away.' : 'Search needs an internet connection.');
+    else body = empty('search', 'What are you in the mood for?', S.online ? 'Search songs or artists to listen to a preview.' : 'Search needs an internet connection.');
     return `<div class="page-inner">
-      ${head('Discover on Audius', 'Find your next feeling.', 'Search songs, artists or moods and keep the good parts close.')}
+      ${head(appleSearch ? 'Official catalog · Apple Music' : 'Independent music · Audius', 'Find your next feeling.', 'Search official releases, or switch to Audius for independent uploads.')}
+      <label class="search-source"><span>Music source</span><select id="search-source" aria-label="Choose a music source"><option value="apple" ${appleSearch ? 'selected' : ''}>Apple Music catalog</option><option value="audius" ${!appleSearch ? 'selected' : ''}>Audius independent</option></select></label>
       <form class="searchbox" id="search-form" role="search">${icon('search')}<input id="q" type="search" placeholder="Search songs, artists, moods…" value="${esc(S.q)}" autocomplete="off" aria-label="Search songs"><button class="btn btn-purple" type="submit">Search</button></form>
+      <p class="search-source-note">${appleSearch ? 'Play available previews here; open Apple Music for full tracks.' : 'Audius uploads are community-published; remixes and unofficial uploads may appear.'}</p>
       ${body}${footer()}</div>`;
   },
 
@@ -911,7 +930,7 @@ function saveSession() {
   if (S.screen !== 'app') return;
   try {
     localStorage.setItem(SESS, JSON.stringify({
-      uid: S.user ? S.user.id : 0, hash: location.hash, scroll: window.scrollY, q: S.q, results: S.results.slice(0, 25), filter: S.filter,
+      uid: S.user ? S.user.id : 0, hash: location.hash, scroll: window.scrollY, q: S.q, results: S.results.slice(0, 25), searchSource: S.searchSource, filter: S.filter,
       cur: S.cur, queue: S.queue.slice(0, 50), baseQueue: S.baseQueue.slice(0, 50), qi: S.qi, pos: S.cur ? position().cur : 0,
       shuffle: S.shuffle, repeat: S.repeat
     }));
@@ -928,15 +947,18 @@ function restoreScroll() {
 function restoreSession() {
   const d = readSession(); if (!d) return;
   S.q = d.q || ''; S.results = d.results || []; S.filter = d.filter || 'all';
+  S.searchSource = d.searchSource === 'audius' ? 'audius' : 'apple';
   S.shuffle = d.shuffle === true;
   S.repeat = ['off', 'all', 'one'].includes(d.repeat) ? d.repeat : 'off';
   if (d.cur) {
     S.cur = d.cur; S.queue = d.queue || []; S.baseQueue = d.baseQueue || S.queue.slice(); S.qi = d.qi == null ? -1 : d.qi;
     S.seq = (S.seq || 0) + 1; S.hinted = S.seq; S.startedAt = 0;
-    if (d.cur.source === 'upload' || d.cur.source === 'audius') {
+    if (d.cur.source === 'upload' || d.cur.source === 'audius' || d.cur.source === 'apple') {
       audio.src = d.cur.source === 'upload'
         ? `/api/tracks/${d.cur.id}/audio`
-        : `/api/audius/tracks/${encodeURIComponent(d.cur.audius_id)}/stream`;
+        : d.cur.source === 'apple'
+          ? d.cur.preview_url
+          : `/api/audius/tracks/${encodeURIComponent(d.cur.audius_id)}/stream`;
       audio.addEventListener('loadedmetadata', () => { try { audio.currentTime = d.pos || 0; } catch { /* not seekable yet */ } }, { once: true });
     }
   }
@@ -947,13 +969,20 @@ window.addEventListener('pagehide', saveSession);
 window.addEventListener('beforeunload', saveSession);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveSession(); });
 
-async function doSearch(q) {
-  S.q = q; S.searchErr = ''; S.results = [];
+async function doSearch(q, source = S.searchSource) {
+  const requestId = ++S.searchRequestId;
+  S.q = q; S.searchSource = source === 'audius' ? 'audius' : 'apple'; S.searchErr = ''; S.results = []; S.searching = false;
   if (!q) return renderView();
   if (!S.online) { S.searchErr = 'Search needs an internet connection.'; return renderView(); }
   S.searching = true; renderView();
-  try { S.results = (await api('/api/audius/search?q=' + encodeURIComponent(q))).results; }
-  catch (e) { S.searchErr = e.message; }
+  try {
+    const endpoint = S.searchSource === 'apple' ? '/api/catalog/search' : '/api/audius/search';
+    const data = await api(endpoint + '?q=' + encodeURIComponent(q));
+    if (requestId === S.searchRequestId) S.results = data.results;
+  } catch (e) {
+    if (requestId === S.searchRequestId) S.searchErr = e.message;
+  }
+  if (requestId !== S.searchRequestId) return;
   S.searching = false; renderView(); saveSession();
   const i = $('#q'); if (i) i.focus();
 }
@@ -1042,6 +1071,11 @@ document.addEventListener('submit', (e) => {
 document.addEventListener('input', (e) => { if (e.target.id === 'vol') setVolume(+e.target.value); });
 
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'search-source') {
+    S.searchSource = e.target.value;
+    if (S.q) doSearch(S.q, S.searchSource);
+    else renderView();
+  }
   if (e.target.id === 'trending-genre') {
     S.trendingGenre = e.target.value;
     S.trendingLoadedKey = '';

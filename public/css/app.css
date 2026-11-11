@@ -194,6 +194,9 @@ h2.section { margin: 0; font-size: 28px; font-weight: 300; letter-spacing: -.04e
 .searchbox input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; font-size: 17px; }
 .searchbox input::placeholder { color: var(--faint); }
 .searchbox .btn { padding: 12px 22px; }
+.search-source { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.search-source select { min-width: 190px; padding: 9px 34px 9px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); background: var(--card-solid); font: inherit; }
+.search-source-note { margin: -4px 0 18px; color: var(--muted); font-size: 13px; }
 
 /* ---------- trending filters and releases ---------- */
 .trending-filters { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 24px; }
@@ -225,6 +228,8 @@ h2.section { margin: 0; font-size: 28px; font-weight: 300; letter-spacing: -.04e
 .row .dur { color: var(--faint); font-size: 14px; text-align: right; }
 .acts { display: flex; align-items: center; gap: 4px; }
 .acts .icon-btn { width: 38px; height: 38px; }
+.source-action { color: var(--accent-soft); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.source-action:hover { color: var(--yellow); }
 .fav.on { color: var(--pink); } .fav.on svg { fill: var(--pink); }
 .dl.on { color: var(--teal); }
 .badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; color: var(--teal); background: rgba(45, 212, 191, .12); vertical-align: middle; }

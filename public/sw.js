@@ -1,4 +1,4 @@
-const VERSION = 'injyana-v4';
+const VERSION = 'injyana-v5';
 const SHELL = ['/', '/css/app.css', '/js/app.js', '/manifest.webmanifest', '/assets/logo.png', '/assets/bg.jpg', '/assets/favicon.png', '/assets/icon-192.png'];
 
 self.addEventListener('install', (e) => {

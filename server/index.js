@@ -8,6 +8,7 @@ const { migrate } = require('./db');
 const auth = require('./auth');
 const library = require('./library');
 const audius = require('./audius');
+const appleMusic = require('./apple-music');
 
 for (const k of ['DATABASE_URL', 'JWT_SECRET']) {
   if (!process.env[k]) { console.error(`Missing ${k}. Copy .env.example to .env and fill it in.`); process.exit(1); }
@@ -38,6 +39,7 @@ const searchLimiter = rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeader
 
 app.use('/api/auth', authLimiter, auth.router);
 app.use('/api/audius', searchLimiter, audius.router);
+app.use('/api/catalog', searchLimiter, appleMusic.router);
 app.use('/api', auth.requireAuth, library);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 

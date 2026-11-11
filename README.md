@@ -16,7 +16,7 @@ Docker is optional. To start the bundled PostgreSQL container instead, run
 
 ## What it does
 - **Accounts**: public sign-up, bcrypt-hashed passwords, JWT in an httpOnly cookie, rate-limited auth routes. Each account has its own library and playlists.
-- **Search + play**: search and stream available tracks through the official Audius API. The Audius API key stays on the server.
+- **Search + play**: search official catalog listings through Apple Music and play available previews, or switch to Audius for independent uploads. Full Apple Music tracks open in Apple Music; Audius results may include unofficial remixes and covers.
 - **Playback controls**: shuffle the current queue and cycle repeat between off, all, and the current track.
 - **Trending**: browse this week's trending Audius songs, artists, albums/EPs, and playlists by genre.
 - **Uploads**: upload your own audio files; they are stored in `uploads/` per user and streamed while online.
@@ -35,6 +35,6 @@ The free web service may sleep when idle. The Supabase Free database has plan li
 
 ## Notes
 - Audius playback and uploads need an internet connection. Only stream tracks the Audius API marks as available and streamable. Respect Audius API terms and creator rights; this app does not download Audius tracks.
-- Search results are cached for 10 minutes, with a server-side timeout and bounded in-memory cache.
+- Search results are cached for 10 minutes, with server-side timeouts and bounded in-memory caches. Apple Music previews are short samples; availability varies by track and storefront.
 - Existing YouTube library entries are retained as legacy records after upgrade, but are no longer playable; users can remove them from their library.
 - Keep `AUDIUS_API_KEY` and `JWT_SECRET` in deployment secrets, never in source control. Rotate credentials if exposed.
