@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: injyana
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AUDIUS_API_KEY
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: UPLOAD_STORAGE
+        value: r2
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: MAX_UPLOAD_MB
+        value: "50"
