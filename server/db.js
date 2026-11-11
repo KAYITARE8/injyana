@@ -1,8 +1,18 @@
 const { Pool } = require('pg');
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: /sslmode=require|render\.com/.test(process.env.DATABASE_URL || '') ? { rejectUnauthorized: false } : undefined
-});
+
+function poolConfig(connectionString) {
+  const useSsl = /sslmode=require|render\.com/.test(connectionString || '');
+  if (!useSsl) return { connectionString };
+
+  const url = new URL(connectionString);
+  url.searchParams.delete('sslmode');
+  return {
+    connectionString: url.toString(),
+    ssl: { rejectUnauthorized: false }
+  };
+}
+
+const pool = new Pool(poolConfig(process.env.DATABASE_URL));
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -77,4 +87,4 @@ CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_id);
 `;
 
 async function migrate() { await pool.query(SCHEMA); }
-module.exports = { pool, migrate };
+module.exports = { pool, migrate, poolConfig };
